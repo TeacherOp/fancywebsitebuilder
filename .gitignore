@@ -1,6 +1,6 @@
 # Environment
 *.env
-app/fancyenv/
+backend/fancyenv/
 __pycache__/
 *.pyc
 
