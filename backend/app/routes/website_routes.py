@@ -3,7 +3,7 @@ Website Routes.
 
 API endpoints for website operations and preview serving.
 """
-from flask import Blueprint, jsonify, send_from_directory, abort
+from flask import Blueprint, jsonify, send_from_directory, abort, Response
 from pathlib import Path
 
 from app.config import Config
@@ -29,22 +29,49 @@ def get_website(website_id: str):
 
 
 @website_bp.route("/websites/<website_id>/preview", methods=["GET"])
-def preview_website(website_id: str):
+@website_bp.route("/websites/<website_id>/preview/<path:filepath>", methods=["GET"])
+def preview_website(website_id: str, filepath: str = "index.html"):
     """
-    Serve the website's index.html for iframe preview.
+    Serve website files for iframe preview.
 
-    Returns the main page which will load other assets via relative paths.
+    - /preview serves index.html (with base tag injected)
+    - /preview/styles.css serves styles.css
+    - /preview/assets/image.png serves assets/image.png
+
+    This allows relative paths in HTML to work correctly.
     """
     website_dir = Config.WEBSITES_DIR / website_id
 
     if not website_dir.exists():
         return jsonify({"error": "Website not found"}), 404
 
-    index_path = website_dir / "index.html"
-    if not index_path.exists():
-        return jsonify({"error": "index.html not found"}), 404
+    # Security check: prevent directory traversal
+    try:
+        full_path = (website_dir / filepath).resolve()
+        if not str(full_path).startswith(str(website_dir.resolve())):
+            abort(403)
+    except (ValueError, RuntimeError):
+        abort(400)
 
-    return send_from_directory(website_dir, "index.html")
+    if not full_path.exists():
+        abort(404)
+
+    # For HTML files, inject base tag so relative paths work
+    if filepath.endswith(".html"):
+        html_content = full_path.read_text(encoding="utf-8")
+        base_url = f"/api/websites/{website_id}/preview/"
+        # Inject base tag after <head>
+        if "<head>" in html_content:
+            html_content = html_content.replace(
+                "<head>",
+                f'<head>\n    <base href="{base_url}">'
+            )
+        return Response(html_content, mimetype="text/html")
+
+    # For other files, serve directly
+    file_dir = full_path.parent
+    filename = full_path.name
+    return send_from_directory(file_dir, filename)
 
 
 @website_bp.route("/websites/<website_id>/files/<path:filepath>", methods=["GET"])

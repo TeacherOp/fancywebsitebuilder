@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Chat, Message } from "@/types";
 import { getChat, sendMessage } from "@/services/api";
 
@@ -14,7 +13,7 @@ export function ChatPanel({ chatId, onWebsiteGenerated }: ChatPanelProps) {
   const [chat, setChat] = useState<Chat | null>(null);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!chatId) {
@@ -36,9 +35,7 @@ export function ChatPanel({ chatId, onWebsiteGenerated }: ChatPanelProps) {
 
   useEffect(() => {
     // Scroll to bottom when messages change
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chat?.messages]);
 
   const handleSend = async () => {
@@ -125,14 +122,14 @@ export function ChatPanel({ chatId, onWebsiteGenerated }: ChatPanelProps) {
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="relative flex h-full flex-col">
       {/* Header */}
-      <div className="border-b p-4">
+      <div className="flex-shrink-0 border-b p-4">
         <h2 className="font-semibold">{chat?.title || "Loading..."}</h2>
       </div>
 
-      {/* Messages */}
-      <ScrollArea className="flex-1 p-4" ref={scrollRef}>
+      {/* Messages - scrollable area */}
+      <div className="flex-1 overflow-y-auto p-4 pb-32">
         <div className="space-y-4">
           {chat?.messages.map((message) => (
             <div
@@ -160,11 +157,12 @@ export function ChatPanel({ chatId, onWebsiteGenerated }: ChatPanelProps) {
               </div>
             </div>
           )}
+          <div ref={messagesEndRef} />
         </div>
-      </ScrollArea>
+      </div>
 
-      {/* Input */}
-      <div className="border-t p-4">
+      {/* Input - fixed at bottom */}
+      <div className="absolute bottom-0 left-0 right-0 border-t bg-background p-4">
         <div className="flex gap-2">
           <Textarea
             value={input}
