@@ -22,6 +22,8 @@ Be conversational and helpful. Guide users to provide details about:
 - Design preferences (colors, style, mood)
 - Specific features (contact form, gallery, animations, etc.)
 
+If the user has uploaded brand resources (logos, images, text files), these will be listed in the system message. Reference them when calling generate_website so the agent can incorporate them.
+
 When you have gathered enough information, call the generate_website tool with a comprehensive direction that captures all the user's requirements."""
 
 
@@ -38,6 +40,19 @@ GENERATE_WEBSITE_TOOL = {
             "direction": {
                 "type": "string",
                 "description": "Comprehensive description of the website to generate, including: site type, pages needed, design preferences (colors, style, mood), features (contact form, gallery, animations), and any specific content or requirements the user mentioned."
+            },
+            "resources": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "filename": {"type": "string", "description": "Original filename of the resource"},
+                        "type": {"type": "string", "description": "Resource type: image or text"},
+                        "brief_summary": {"type": "string", "description": "AI-generated summary of the resource"},
+                        "raw_url": {"type": "string", "description": "URL path to the raw resource file"}
+                    }
+                },
+                "description": "Array of user-uploaded brand resources (logos, images, text files) to incorporate into the website. Each has a brief_summary and raw_url for the agent to use."
             }
         },
         "required": ["direction"]
@@ -73,9 +88,10 @@ Your task is to create complete, production-ready websites (1-8 pages) that work
    - Plan features and design system
 
 2. **Generate Images** (use generate_website_image tool):
-   - Only for hero backgrounds, portfolio items, etc.
-   - Use CSS/SVG for icons and shapes
-   - Call multiple times as needed
+   - Generate up to 10 images as needed (hero, backgrounds, portfolio items, team photos, etc.)
+   - Only generate images that add value to the website
+   - Use CSS/SVG for icons and shapes (don't generate these as images)
+   - Call multiple times as needed for the website content
 
 3. **Create Files** (use create_file, read_file, update_file_lines, insert_code):
    - Create HTML files with full structure
@@ -113,8 +129,17 @@ Your task is to create complete, production-ready websites (1-8 pages) that work
 ```
 
 ## Image Placeholders:
-Use IMAGE_1, IMAGE_2, etc. as placeholders for generated images.
+Use IMAGE_1 through IMAGE_10 as placeholders for generated images.
 Example: <img src="IMAGE_1" alt="Hero background">
+Generate images first, then use their placeholders in the HTML files.
+
+## User Brand Resources:
+If the user has provided brand resources (logos, images, text files), they will be listed in the initial message with:
+- filename and type (image/text)
+- brief_summary explaining what the resource is
+- raw_url path to use in your HTML (e.g., /api/chats/{chat_id}/assets/raw/logo.png)
+
+Use these resources directly in your HTML with the provided raw_url paths. For logos, use them in the header/footer. For other images, incorporate them appropriately based on their description.
 
 ## CRITICAL Requirements:
 1. Always read_file before updating to see line numbers
@@ -185,7 +210,8 @@ PLAN_WEBSITE_TOOL = {
                         "aspect_ratio": {"type": "string"}
                     }
                 },
-                "description": "List of images to generate"
+                "maxItems": 10,
+                "description": "List of images to generate (up to 10). Include hero backgrounds, section backgrounds, portfolio items, team photos, etc."
             }
         },
         "required": ["site_type", "site_name", "pages", "features", "design_system"]

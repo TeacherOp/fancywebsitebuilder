@@ -86,6 +86,7 @@ class ChatService:
             "message_count": 0,
             "messages": [],
             "website_id": None,  # Will be set when website is generated
+            "brand_guidelines": "",  # User's brand guidelines
         }
 
         # Save chat file
@@ -181,6 +182,27 @@ class ChatService:
         return self.update_chat(chat_id, {
             "message_count": chat_data.get("message_count", 0)
         })
+
+    def update_brand_guidelines(self, chat_id: str, brand_guidelines: str) -> bool:
+        """
+        Update brand guidelines for a chat.
+
+        Args:
+            chat_id: The chat UUID
+            brand_guidelines: Brand guidelines text
+
+        Returns:
+            True if successful
+        """
+        chat_data = self.get_chat(chat_id)
+        if not chat_data:
+            return False
+
+        chat_data["brand_guidelines"] = brand_guidelines
+        chat_data["updated_at"] = datetime.now().isoformat()
+
+        chat_path = self._get_chat_path(chat_id)
+        return write_json(chat_path, chat_data)
 
 
 # Singleton instance

@@ -4,11 +4,12 @@ Main Chat Service.
 Orchestrates chat message processing with AI responses.
 Triggers website agent when user wants to generate a website.
 """
-from typing import Any, Dict, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple
 
 from app.services.claude_service import claude_service
 from app.services.message_service import message_service
 from app.services.chat_service import chat_service
+from app.services.brand_service import brand_service
 from app.tools.tool_definitions import get_main_chat_tools, MAIN_CHAT_SYSTEM_PROMPT
 from app.utils.parsing_utils import (
     is_tool_use,
@@ -27,10 +28,35 @@ class MainChatService:
 
     MAX_TOOL_ITERATIONS = 10
 
+    def _build_system_prompt(self, chat_id: str) -> str:
+        """
+        Build system prompt with brand resources and guidelines.
+
+        Args:
+            chat_id: The chat UUID
+
+        Returns:
+            System prompt string with resources appended
+        """
+        system_prompt = MAIN_CHAT_SYSTEM_PROMPT
+
+        # Add brand guidelines
+        chat = chat_service.get_chat(chat_id)
+        if chat and chat.get("brand_guidelines"):
+            system_prompt += f"\n\n## User's Brand Guidelines\n{chat['brand_guidelines']}"
+
+        # Add resources summary
+        resources_summary = brand_service.get_resources_summary(chat_id)
+        if resources_summary:
+            system_prompt += f"\n\n{resources_summary}"
+
+        return system_prompt
+
     def send_message(
         self,
         chat_id: str,
-        user_message_text: str
+        user_message_text: str,
+        progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None
     ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         """
         Process a user message and get AI response.
@@ -44,15 +70,19 @@ class MainChatService:
         Args:
             chat_id: The chat UUID
             user_message_text: The user's message text
+            progress_callback: Optional callback for progress updates
 
         Returns:
             Tuple of (user_message_dict, assistant_message_dict)
         """
+        # Store callback for use in tool execution
+        self._progress_callback = progress_callback
         # Step 1: Store user message
         user_msg = message_service.add_user_message(chat_id, user_message_text)
 
-        # Step 2: Get tools
+        # Step 2: Get tools and build dynamic system prompt
         tools = get_main_chat_tools()
+        system_prompt = self._build_system_prompt(chat_id)
 
         try:
             # Step 3: Build messages and call Claude
@@ -60,7 +90,7 @@ class MainChatService:
 
             response = claude_service.send_message(
                 messages=api_messages,
-                system_prompt=MAIN_CHAT_SYSTEM_PROMPT,
+                system_prompt=system_prompt,
                 tools=tools,
             )
 
@@ -110,7 +140,7 @@ class MainChatService:
                 api_messages = message_service.build_api_messages(chat_id)
                 response = claude_service.send_message(
                     messages=api_messages,
-                    system_prompt=MAIN_CHAT_SYSTEM_PROMPT,
+                    system_prompt=system_prompt,
                     tools=tools,
                 )
 
@@ -175,7 +205,7 @@ class MainChatService:
 
         Args:
             chat_id: The chat UUID
-            tool_input: Contains 'direction' with user requirements
+            tool_input: Contains 'direction' and optional 'resources'
 
         Returns:
             Result message
@@ -185,13 +215,22 @@ class MainChatService:
 
         direction = tool_input.get("direction", "")
 
+        # Get resources - either from tool input or fetch from brand service
+        resources = tool_input.get("resources", [])
+        if not resources:
+            # Fallback: get resources from brand service if not provided in tool call
+            resources = brand_service.get_resources_for_agent(chat_id)
+
         print(f"Triggering website agent for chat {chat_id}")
         print(f"Direction: {direction[:100]}...")
+        print(f"Resources: {len(resources)} available")
 
         try:
             result = website_agent_service.generate_website(
                 chat_id=chat_id,
-                direction=direction
+                direction=direction,
+                resources=resources,
+                progress_callback=getattr(self, '_progress_callback', None)
             )
 
             if result.get("success"):

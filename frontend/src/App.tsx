@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Toaster } from "sonner";
 import { ChatList } from "@/components/ChatList";
 import { ChatPanel } from "@/components/ChatPanel";
 import { WebsitePanel } from "@/components/WebsitePanel";
@@ -27,6 +28,7 @@ function App() {
 
   return (
     <div className="flex h-screen overflow-hidden">
+      <Toaster position="top-right" richColors />
       {/* Left Sidebar - Chat List */}
       <Collapsible
         open={leftSidebarOpen}

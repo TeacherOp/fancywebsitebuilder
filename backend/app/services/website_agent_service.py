@@ -5,7 +5,7 @@ AI agent for generating complete websites using an agentic loop pattern.
 """
 import uuid
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List, Optional
 
 from app.config import Config
 from app.services.claude_service import claude_service
@@ -33,7 +33,9 @@ class WebsiteAgentService:
     def generate_website(
         self,
         chat_id: str,
-        direction: str
+        direction: str,
+        resources: List[Dict[str, Any]] = None,
+        progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None
     ) -> Dict[str, Any]:
         """
         Run the agent to generate a website.
@@ -41,10 +43,18 @@ class WebsiteAgentService:
         Args:
             chat_id: Associated chat ID
             direction: User's requirements and design preferences
+            resources: Optional list of user-uploaded brand resources
+            progress_callback: Optional callback for progress updates
 
         Returns:
             Result dict with website info or error
         """
+        resources = resources or []
+
+        def emit_progress(event_type: str, **kwargs):
+            """Emit a progress event if callback is provided."""
+            if progress_callback:
+                progress_callback({"type": event_type, **kwargs})
         execution_id = str(uuid.uuid4())
         started_at = datetime.now().isoformat()
 
@@ -66,15 +76,27 @@ Please create a complete website following the workflow:
 4. Ensure navigation and footer are consistent across all pages
 5. Finalize when all files are complete"""
 
+        # Add resources section if available
+        if resources:
+            resources_section = "\n\n## Available Brand Resources\n"
+            resources_section += "Use these user-provided assets in the website:\n\n"
+            for r in resources:
+                resources_section += f"- **{r.get('filename')}** ({r.get('type')})\n"
+                resources_section += f"  Summary: {r.get('brief_summary', 'No description')}\n"
+                resources_section += f"  URL: {r.get('raw_url')}\n\n"
+            user_message += resources_section
+
         messages = [{"role": "user", "content": user_message}]
 
         total_input_tokens = 0
         total_output_tokens = 0
 
         print(f"[WebsiteAgent] Starting (website_id: {website_id[:8]})")
+        emit_progress("agent_started", website_id=website_id)
 
         for iteration in range(1, self.MAX_ITERATIONS + 1):
             print(f"  Iteration {iteration}/{self.MAX_ITERATIONS}")
+            emit_progress("iteration_start", iteration=iteration, max_iterations=self.MAX_ITERATIONS)
 
             response = claude_service.send_message(
                 messages=messages,
@@ -104,6 +126,15 @@ Please create a complete website following the workflow:
 
                     print(f"    Tool: {tool_name}")
 
+                    # Build tool details for progress
+                    tool_details = self._get_tool_details(tool_name, tool_input)
+                    emit_progress(
+                        "tool_start",
+                        iteration=iteration,
+                        tool_name=tool_name,
+                        tool_details=tool_details
+                    )
+
                     result = self._handle_tool(
                         website_id, tool_name, tool_input
                     )
@@ -116,6 +147,12 @@ Please create a complete website following the workflow:
                         )
 
                         print(f"  Completed in {iteration} iterations")
+                        emit_progress(
+                            "agent_completed",
+                            iterations=iteration,
+                            website_id=website_id,
+                            pages_created=final_result.get("pages_created", [])
+                        )
 
                         self._save_execution(
                             execution_id, website_id, messages,
@@ -399,6 +436,38 @@ Please create a complete website following the workflow:
         if isinstance(block, dict):
             return block.get(attr, default)
         return getattr(block, attr, default)
+
+    def _get_tool_details(self, tool_name: str, tool_input: Dict[str, Any]) -> str:
+        """Get human-readable details for a tool call."""
+        if tool_name == "plan_website":
+            site_name = tool_input.get("site_name", "Untitled")
+            pages = tool_input.get("pages", [])
+            return f"Planning: {site_name} ({len(pages)} pages)"
+
+        elif tool_name == "generate_website_image":
+            purpose = tool_input.get("purpose", "unknown")
+            return f"Generating image: {purpose}"
+
+        elif tool_name == "create_file":
+            filename = tool_input.get("filename", "")
+            return f"Creating: {filename}"
+
+        elif tool_name == "update_file_lines":
+            filename = tool_input.get("filename", "")
+            return f"Updating: {filename}"
+
+        elif tool_name == "insert_code":
+            filename = tool_input.get("filename", "")
+            return f"Inserting code: {filename}"
+
+        elif tool_name == "read_file":
+            filename = tool_input.get("filename", "")
+            return f"Reading: {filename}"
+
+        elif tool_name == "finalize_website":
+            return "Finalizing website"
+
+        return tool_name
 
 
 # Singleton instance

@@ -30,6 +30,7 @@ export interface ContentBlock {
 
 export interface Chat extends ChatMeta {
   messages: Message[];
+  brand_guidelines?: string;
 }
 
 // Website types

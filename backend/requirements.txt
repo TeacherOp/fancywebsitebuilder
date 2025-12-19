@@ -10,3 +10,6 @@ anthropic>=0.39.0
 
 # Google Gemini API
 google-genai>=0.3.0
+
+# Image processing
+Pillow>=10.0.0
