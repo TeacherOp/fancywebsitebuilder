@@ -1,0 +1,12 @@
+# Environment
+*.env
+app/fancyenv/
+__pycache__/
+*.pyc
+
+# Data
+data/
+
+# IDE
+.vscode/
+.idea/
